@@ -6,6 +6,7 @@ A language model built from scratch in Python, following the
 ## Progress
 
 - [x] BPE tokenizer: training (`language_model.bpe`), encoding and decoding (`language_model.tokenizer`)
+- [x] Transformer building blocks: `Linear`, `Embedding`, `RMSNorm`, `SwiGLU` and RoPE (`language_model.model`)
 
 ## Setup
 
