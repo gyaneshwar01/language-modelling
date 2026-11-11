@@ -4,7 +4,7 @@ import einx
 import torch
 import torch.nn as nn
 from einops import einsum, rearrange
-from jaxtyping import Float, Int
+from jaxtyping import Bool, Float, Int
 from torch import Tensor
 
 
@@ -64,11 +64,11 @@ def silu(x: torch.Tensor):
 
 
 class SwiGLU(nn.Module):
-    def __init__(self, d_model: int, d_ff: int):
+    def __init__(self, d_model: int, d_ff: int, device: torch.device | None = None, dtype: torch.dtype | None = None):
         super().__init__()
-        self.w1 = Linear(d_model, d_ff)
-        self.w2 = Linear(d_ff, d_model)
-        self.w3 = Linear(d_model, d_ff)
+        self.w1 = Linear(d_model, d_ff, device=device, dtype=dtype)
+        self.w2 = Linear(d_ff, d_model, device=device, dtype=dtype)
+        self.w3 = Linear(d_model, d_ff, device=device, dtype=dtype)
 
     def forward(self, x):
         return self.w2(silu(self.w1(x)) * self.w3(x))
@@ -112,4 +112,77 @@ class RotaryPositionalEmbedding(nn.Module):
         x2_rot = sin * x1 + cos * x2
 
         result = rearrange(torch.stack((x1_rot, x2_rot)), "xy ... half_d -> ... (half_d xy)")
-        return result
+        return result.to(x.dtype)
+
+
+def softmax(x: Float[Tensor, " ..."], dim: int) -> Float[Tensor, " ..."]:
+    m = x.max(dim, keepdim=True)[0]
+    counts = torch.exp(x - m)
+    return counts / counts.sum(dim, keepdim=True)
+
+
+def scaled_dot_product_attention(
+    Q: Float[Tensor, "... queries d_k"],
+    K: Float[Tensor, "... keys d_k"],
+    V: Float[Tensor, "... keys d_v"],
+    mask: Bool[Tensor, " ... queries keys"] | None = None,
+) -> Float[Tensor, "... queries d_v"]:
+    d_k = Q.shape[-1]
+    scores = einsum(Q, K, "... queries d_k, ... keys d_k -> ... queries keys") / math.sqrt(d_k)
+
+    if mask is not None:
+        scores = torch.where(mask, scores, float("-inf"))
+
+    att_wts = softmax(scores, dim=-1)
+    return einsum(att_wts, V, " ... queries keys, ... keys d_v -> ... queries d_v")
+
+
+class CausalMultiHeadSelfAttention(nn.Module):
+    def __init__(
+        self,
+        d_model: int,
+        num_heads: int,
+        positional_encoder: RotaryPositionalEmbedding | None = None,
+        device: torch.device | None = None,
+        dtype: torch.dtype | None = None,
+    ):
+        super().__init__()
+        assert d_model % num_heads == 0
+        self.d_model = d_model
+        self.num_heads = num_heads
+        self.d_k = d_model // num_heads
+        self.d_v = self.d_k
+
+        self.q_proj = Linear(self.d_model, self.num_heads * self.d_k, device=device, dtype=dtype)
+        self.k_proj = Linear(self.d_model, self.num_heads * self.d_k, device=device, dtype=dtype)
+        self.v_proj = Linear(self.d_model, self.num_heads * self.d_v, device=device, dtype=dtype)
+
+        self.output_proj = Linear(self.num_heads * self.d_v, self.d_model, device=device, dtype=dtype)
+
+        self.positional_encoder = positional_encoder
+
+    def forward(
+        self, x: Float[Tensor, " ... seq d_model"], token_positions: Int[Tensor, " ... seq"] | None = None
+    ) -> Float[Tensor, " ... seq d_model"]:
+        seq_len = x.shape[-2]
+
+        Q = self.q_proj(x)
+        K = self.k_proj(x)
+        V = self.v_proj(x)
+
+        Q, K, V = (rearrange(X, "... seq (heads d) -> ... heads seq d", heads=self.num_heads) for X in (Q, K, V))
+
+        if self.positional_encoder is not None:
+            if token_positions is not None:
+                token_positions = rearrange(token_positions, "... seq -> ... 1 seq")
+            Q = self.positional_encoder(Q, token_positions)
+            K = self.positional_encoder(K, token_positions)
+
+        mask = torch.tril(torch.ones(seq_len, seq_len, dtype=torch.bool, device=x.device))
+
+        attn_out = scaled_dot_product_attention(Q, K, V, mask)
+        attn_out = rearrange(attn_out, "... heads seq d_v -> ... seq (heads d_v)")
+
+        output = self.output_proj(attn_out)
+
+        return output

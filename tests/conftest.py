@@ -79,6 +79,11 @@ def n_queries():
 
 
 @pytest.fixture
+def n_keys():
+    return 16
+
+
+@pytest.fixture
 def n_heads():
     return 4
 
@@ -101,6 +106,30 @@ def d_ff():
 @pytest.fixture
 def theta():
     return 10000.0
+
+
+@pytest.fixture
+def q(batch_size, n_queries, d_model):
+    torch.manual_seed(1)
+    return torch.randn(batch_size, n_queries, d_model)
+
+
+@pytest.fixture
+def k(batch_size, n_keys, d_model):
+    torch.manual_seed(2)
+    return torch.randn(batch_size, n_keys, d_model)
+
+
+@pytest.fixture
+def v(batch_size, n_keys, d_model):
+    torch.manual_seed(3)
+    return torch.randn(batch_size, n_keys, d_model)
+
+
+@pytest.fixture
+def mask(batch_size, n_queries, n_keys):
+    torch.manual_seed(5)
+    return torch.randn(batch_size, n_queries, n_keys) > 0.5
 
 
 @pytest.fixture
