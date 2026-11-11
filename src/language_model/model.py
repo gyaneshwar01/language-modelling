@@ -186,3 +186,83 @@ class CausalMultiHeadSelfAttention(nn.Module):
         output = self.output_proj(attn_out)
 
         return output
+
+
+class TransformerBlock(nn.Module):
+    def __init__(
+        self,
+        d_model: int,
+        num_heads: int,
+        d_ff: int,
+        positional_encoder: RotaryPositionalEmbedding | None = None,
+        device: torch.device | None = None,
+        dtype: torch.dtype | None = None,
+    ):
+        super().__init__()
+        self.ln1 = RMSNorm(d_model, dtype=dtype, device=device)
+        self.attn = CausalMultiHeadSelfAttention(d_model, num_heads, positional_encoder, dtype=dtype, device=device)
+        self.ln2 = RMSNorm(d_model, dtype=dtype, device=device)
+        self.ffn = SwiGLU(d_model, d_ff, dtype=dtype, device=device)
+
+    def forward(
+        self, x: Float[Tensor, " ... seq d_model"], token_positions: Int[Tensor, " ... seq"] | None = None
+    ) -> Float[Tensor, " ... seq d_model"]:
+        x_ln1 = self.ln1(x)
+        x_attn = self.attn(x_ln1, token_positions)
+        attn_out = x + x_attn
+
+        x_ln2 = self.ln2(attn_out)
+        x_ffn = self.ffn(x_ln2)
+        return attn_out + x_ffn
+
+
+class TransformerLM(nn.Module):
+    def __init__(
+        self,
+        vocab_size: int,
+        context_length: int,
+        d_model: int,
+        num_layers: int,
+        num_heads: int,
+        d_ff: int,
+        theta: float | None = 10_000.0,
+        device: torch.device | None = None,
+        dtype: torch.dtype | None = None,
+    ):
+        super().__init__()
+        self.context_length = context_length
+        self.d_model = d_model
+        self.token_embeddings = Embedding(vocab_size, d_model, device, dtype)
+        d_k = d_model // num_heads
+        self.positional_encoder = (
+            RotaryPositionalEmbedding(theta, d_k, context_length, device) if theta is not None else None
+        )
+
+        self.layers = nn.ModuleList(
+            [
+                TransformerBlock(
+                    d_model,
+                    num_heads,
+                    d_ff,
+                    self.positional_encoder,
+                    device=device,
+                    dtype=dtype,
+                )
+                for _ in range(num_layers)
+            ]
+        )
+        self.ln_final = RMSNorm(d_model, device=device, dtype=dtype)
+        self.lm_head = Linear(d_model, vocab_size, device=device, dtype=dtype)
+
+    def forward(
+        self, x: Int[Tensor, "... seq"], token_positions: Int[Tensor, "... seq"] | None = None
+    ) -> Float[Tensor, "... seq_len vocab"]:
+        x = self.token_embeddings(x)
+
+        for layer in self.layers:
+            x = layer(x, token_positions)  # (B, seq, d_model)
+
+        x = self.ln_final(x)  # (B, seq, d_model)
+        logits = self.lm_head(x)  # (B, seq, vocab)
+
+        return logits

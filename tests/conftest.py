@@ -64,6 +64,11 @@ def ts_state_dict():
 
 
 @pytest.fixture
+def n_layers():
+    return 3
+
+
+@pytest.fixture
 def vocab_size():
     return 10_000
 

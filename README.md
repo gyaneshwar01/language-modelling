@@ -8,6 +8,7 @@ A language model built from scratch in Python, following the
 - [x] BPE tokenizer: training (`language_model.bpe`), encoding and decoding (`language_model.tokenizer`)
 - [x] Transformer building blocks: `Linear`, `Embedding`, `RMSNorm`, `SwiGLU` and RoPE (`language_model.model`)
 - [x] Attention: softmax, scaled dot-product attention and causal multi-head self-attention with RoPE (`language_model.model`)
+- [x] Transformer: pre-norm `TransformerBlock` and the full `TransformerLM` (`language_model.model`)
 
 ## Setup
 

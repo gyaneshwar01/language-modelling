@@ -10,6 +10,8 @@ from language_model.model import (
     RMSNorm,
     RotaryPositionalEmbedding,
     SwiGLU,
+    TransformerBlock,
+    TransformerLM,
     scaled_dot_product_attention,
     silu,
     softmax,
@@ -109,3 +111,28 @@ def test_multihead_self_attention_with_rope(
     load_attention_weights(attn, ts_state_dict[0])
     pos_ids = rearrange(pos_ids, "seq -> 1 seq")
     numpy_snapshot.assert_match(attn(in_embeddings, pos_ids), atol=1e-5)
+
+
+def test_transformer_block(numpy_snapshot, ts_state_dict, in_embeddings, d_model, n_heads, d_ff, n_keys, theta):
+    block_weights = {k.replace("layers.0.", ""): v for k, v in ts_state_dict[0].items() if "layers.0." in k}
+    rope = RotaryPositionalEmbedding(theta, d_model // n_heads, n_keys)
+    block = TransformerBlock(d_model, n_heads, d_ff, rope)
+    block.load_state_dict(block_weights)
+    numpy_snapshot.assert_match(block(in_embeddings), atol=1e-4)
+
+
+def test_transformer_lm(
+    numpy_snapshot, vocab_size, n_keys, d_model, n_layers, n_heads, d_ff, theta, ts_state_dict, in_indices
+):
+    lm = TransformerLM(vocab_size, n_keys, d_model, n_layers, n_heads, d_ff, theta=theta)
+    lm.load_state_dict(ts_state_dict[0])
+    numpy_snapshot.assert_match(lm(in_indices), atol=1e-4, rtol=1e-2)
+
+
+def test_transformer_lm_truncated_input(
+    numpy_snapshot, vocab_size, n_keys, d_model, n_layers, n_heads, d_ff, theta, ts_state_dict, in_indices
+):
+    lm = TransformerLM(vocab_size, n_keys, d_model, n_layers, n_heads, d_ff, theta=theta)
+    lm.load_state_dict(ts_state_dict[0])
+    in_indices_truncated = in_indices[..., : in_indices.shape[-1] // 2]
+    numpy_snapshot.assert_match(lm(in_indices_truncated), atol=1e-4)
