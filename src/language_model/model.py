@@ -13,10 +13,8 @@ class Linear(nn.Module):
         self, in_features: int, out_features: int, device: torch.device | None = None, dtype: torch.dtype | None = None
     ):
         super().__init__()
-        self.in_features = in_features
-        self.out_features = out_features
         std = math.sqrt(2 / (out_features + in_features))
-        wts = torch.empty((self.out_features, self.in_features), dtype=dtype, device=device)
+        wts = torch.empty((out_features, in_features), dtype=dtype, device=device)
         torch.nn.init.trunc_normal_(wts, 0, std, -3 * std, 3 * std)
         self.weight: Float[Tensor, "d_out d_in"] = nn.Parameter(wts)
 
@@ -70,7 +68,7 @@ class SwiGLU(nn.Module):
         self.w2 = Linear(d_ff, d_model, device=device, dtype=dtype)
         self.w3 = Linear(d_model, d_ff, device=device, dtype=dtype)
 
-    def forward(self, x):
+    def forward(self, x: Float[Tensor, "... d_model"]) -> Float[Tensor, "... d_model"]:
         return self.w2(silu(self.w1(x)) * self.w3(x))
 
 
@@ -230,8 +228,6 @@ class TransformerLM(nn.Module):
         dtype: torch.dtype | None = None,
     ):
         super().__init__()
-        self.context_length = context_length
-        self.d_model = d_model
         self.token_embeddings = Embedding(vocab_size, d_model, device, dtype)
         d_k = d_model // num_heads
         self.positional_encoder = (
