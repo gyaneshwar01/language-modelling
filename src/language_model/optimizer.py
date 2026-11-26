@@ -67,3 +67,15 @@ class AdamW(torch.optim.Optimizer):
                 p.addcdiv_(m, v.sqrt().add_(eps), value=-alpha_t)  # p = p - alpha_t * m/(sqrt(v) + eps)
 
         return loss
+
+
+def cosine_scheduler(it: int, max_lr: float, min_lr: float, t_w: int, t_c: int) -> float:
+    if it < t_w:
+        lr = max_lr * it / t_w
+    elif it > t_c:
+        lr = min_lr
+    else:
+        decay = (it - t_w) / (t_c - t_w)
+        coeff = 0.5 * (1 + math.cos(math.pi * decay))  # max = 1, min = 0
+        lr = min_lr + coeff * (max_lr - min_lr)  # max = max_lr (coeff=1), min = min_lr (coeff=0)
+    return lr

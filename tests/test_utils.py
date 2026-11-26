@@ -1,8 +1,9 @@
 import numpy
 import torch
 import torch.nn.functional as F
+from torch.nn.utils.clip_grad import clip_grad_norm_
 
-from language_model.utils import cross_entropy
+from language_model.utils import clip_gradient, cross_entropy
 
 
 def test_cross_entropy():
@@ -38,3 +39,33 @@ def test_cross_entropy():
         large_expected_cross_entropy.detach().numpy(),
         atol=1e-4,
     )
+
+
+def test_gradient_clipping():
+    tensors = [torch.randn((5, 5)) for _ in range(6)]
+    max_norm = 1e-2
+
+    t1 = tuple(torch.nn.Parameter(torch.clone(t)) for t in tensors)
+    # Test freezing one parameter.
+    t1[-1].requires_grad_(False)
+
+    loss = torch.cat(t1).sum()
+    loss.backward()
+    clip_grad_norm_(t1, max_norm)
+    t1_grads = [torch.clone(t.grad) for t in t1 if t.grad is not None]
+
+    t1_c = tuple(torch.nn.Parameter(torch.clone(t)) for t in tensors)
+    t1_c[-1].requires_grad_(False)
+    loss_c = torch.cat(t1_c).sum()
+    loss_c.backward()
+    clip_gradient(t1_c, max_norm)
+    t1_c_grads = [torch.clone(t.grad) for t in t1_c if t.grad is not None]
+
+    assert len(t1_grads) == len(t1_c_grads)
+
+    for t1_grad, t1_c_grad in zip(t1_grads, t1_c_grads):
+        numpy.testing.assert_allclose(
+            t1_grad.detach().numpy(),
+            t1_c_grad.detach().numpy(),
+            atol=1e-5,
+        )

@@ -9,7 +9,7 @@ A language model built from scratch in Python, following the
 - [x] Transformer building blocks: `Linear`, `Embedding`, `RMSNorm`, `SwiGLU` and RoPE (`language_model.model`)
 - [x] Attention: softmax, scaled dot-product attention and causal multi-head self-attention with RoPE (`language_model.model`)
 - [x] Transformer: pre-norm `TransformerBlock` and the full `TransformerLM` (`language_model.model`)
-- [x] Training: cross-entropy loss (`language_model.utils`) and the `AdamW` optimizer (`language_model.optimizer`)
+- [x] Training: cross-entropy loss and gradient clipping (`language_model.utils`), the `AdamW` optimizer and a cosine learning-rate schedule with warmup (`language_model.optimizer`)
 
 ## Setup
 
