@@ -10,3 +10,5 @@ dist/
 # Datasets and training outputs
 data/
 artifacts/
+checkpoints/
+wandb/

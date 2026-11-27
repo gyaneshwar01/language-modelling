@@ -10,6 +10,7 @@ A language model built from scratch in Python, following the
 - [x] Attention: softmax, scaled dot-product attention and causal multi-head self-attention with RoPE (`language_model.model`)
 - [x] Transformer: pre-norm `TransformerBlock` and the full `TransformerLM` (`language_model.model`)
 - [x] Training: cross-entropy loss and gradient clipping (`language_model.utils`), the `AdamW` optimizer and a cosine learning-rate schedule with warmup (`language_model.optimizer`)
+- [x] Training loop with token batching, validation loss, checkpoint save and resume, and optional W&B logging. Run `uv run python -m language_model.train --help` for options.
 
 ## Setup
 
